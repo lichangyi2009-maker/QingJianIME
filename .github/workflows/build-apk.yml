@@ -36,8 +36,8 @@ jobs:
       - name: 安装 Android SDK
         run: |
           sdkmanager platform-tools
-          sdkmanager platforms;android-35
-          sdkmanager build-tools;35.0.0
+          sdkmanager platforms\;android-35
+          sdkmanager build-tools\;35.0.0
 
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -55,48 +55,4 @@ jobs:
         run: |
           printf '\nandroid.javaCompile.suppressSourceTargetDeprecationWarning=true\n' >> gradle.properties
 
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path("app/build.gradle")
-          text = p.read_text()
-
-          if "compileOptions" not in text:
-              text += """
-          
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          """
-
-          if "jvmTarget = \"17\"" not in text:
-              text += """
-
-          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
-          """
-
-          p.write_text(text)
-          PY
-
-      - name: 编译 APK
-        working-directory: source
-        run: |
-          gradle :app:assembleDebug --no-daemon
-
-      - name: 检查 APK
-        run: |
-          ls -lh source/app/build/outputs/apk/debug/
-
-      - name: 上传 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: QingJianIME-APK
-          path: source/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          python3
