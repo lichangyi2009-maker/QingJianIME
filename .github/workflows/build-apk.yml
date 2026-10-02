@@ -12,11 +12,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 解压工程
+        shell: bash
         run: |
           mkdir -p source
           unzip -q QingJianIME-Android-v1.0.0.zip -d source
-          echo "工程目录："
-          find source -maxdepth 2 -type f | head -50
 
       - name: 设置 JDK 17
         uses: actions/setup-java@v5
@@ -25,99 +24,61 @@ jobs:
           java-version: '17'
 
       - name: 设置 Android SDK
+        shell: bash
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
           echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "/usr/local/lib/android/sdk/platform-tools" >> "$GITHUB_PATH"
 
-      - name: 检查 Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          sdkmanager --version
-
       - name: 接受 Android SDK 许可证
+        shell: bash
         run: |
           yes | sdkmanager --licenses || true
 
       - name: 安装 Android SDK
+        shell: bash
         run: |
           sdkmanager platform-tools
-          sdkmanager platforms\;android-35
-          sdkmanager build-tools\;35.0.0
+          sdkmanager 'platforms;android-35'
+          sdkmanager 'build-tools;35.0.0'
 
-      - name: 检查 Android SDK
+      - name: 配置 AndroidX
+        working-directory: source
+        shell: bash
         run: |
-          sdkmanager --list_installed | grep -E "platforms;android-35|build-tools;35.0.0|platform-tools" || true
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+
+      - name: 配置 Java 17
+        working-directory: source
+        shell: bash
+        run: |
+          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
 
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.11.1
 
-      - name: 配置 AndroidX
-        working-directory: source
-        run: |
-          touch gradle.properties
-          echo "android.useAndroidX=true" >> gradle.properties
-          echo "android.enableJetifier=true" >> gradle.properties
-
-      - name: 配置 Java 17 和 Kotlin 17
-        working-directory: source
-        run: |
-          printf '\nandroid.javaCompile.suppressSourceTargetDeprecationWarning=true\n' >> gradle.properties
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          p = Path("app/build.gradle")
-
-          if not p.exists():
-              print("错误：找不到 app/build.gradle")
-              raise SystemExit(1)
-
-          text = p.read_text()
-
-          if "compileOptions" not in text:
-              text += """
-
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          """
-
-          if "jvmTarget = \"17\"" not in text:
-              text += """
-
-          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
-          """
-
-          p.write_text(text)
-
-          print("Java 17 / Kotlin JVM 17 配置完成")
-          PY
-
-      - name: 查看工程结构
-        working-directory: source
-        run: |
-          echo "当前目录："
-          pwd
-          echo "文件："
-          find . -maxdepth 2 -type f | sort | head -100
-
       - name: 编译 APK
         working-directory: source
+        shell: bash
         run: |
-          echo "开始编译 QingJianIME..."
           gradle :app:assembleDebug --no-daemon --stacktrace
-          echo "Gradle 编译完成"
 
-      - name: 查
+      - name: 查找 APK
+        shell: bash
+        run: |
+          echo "===== APK 文件 ====="
+          find source -type f -name "*.apk" -print
+          echo "===================="
+
+      - name: 验证 APK
+        shell: bash
+        run: |
+          if ! find source -type f -name "*.apk" | grep -q ".apk"; then
+            echo "错误：没有找到 APK"
+            exit 1
+          fi
+          echo "APK 已成功生成"
