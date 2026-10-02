@@ -43,23 +43,56 @@ jobs:
           sdkmanager 'platforms;android-35'
           sdkmanager 'build-tools;35.0.0'
 
+      - name: 修复 Java 和 Kotlin JVM 版本
+        working-directory: source
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle.kts")
+          text = p.read_text()
+
+          # 删除旧的 kotlinOptions 配置
+          text = text.replace(
+              '    kotlinOptions { jvmTarget = "17" }\n',
+              ''
+          )
+
+          # 在 android {} 中加入 Java 17 工具链和 Kotlin 17
+          marker = '    defaultConfig {'
+
+          insert = '''    compileOptions {
+              sourceCompatibility = JavaVersion.VERSION_17
+              targetCompatibility = JavaVersion.VERSION_17
+          }
+
+          kotlin {
+              jvmToolchain(17)
+          }
+
+          '''
+
+          if 'compileOptions {' not in text:
+              text = text.replace(marker, insert + marker)
+
+          p.write_text(text)
+
+          print("===== 修复后的 app/build.gradle.kts =====")
+          print(text)
+          PY
+
+      - name: 设置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.11.1
+
       - name: 配置 AndroidX
         working-directory: source
         shell: bash
         run: |
           echo "android.useAndroidX=true" >> gradle.properties
           echo "android.enableJetifier=true" >> gradle.properties
-
-      - name: 配置 Java 17
-        working-directory: source
-        shell: bash
-        run: |
-          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
-
-      - name: 设置 Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.11.1
 
       - name: 编译 APK
         working-directory: source
@@ -70,15 +103,26 @@ jobs:
       - name: 查找 APK
         shell: bash
         run: |
-          echo "===== APK 文件 ====="
+          echo "========== APK =========="
           find source -type f -name "*.apk" -print
-          echo "===================="
+          echo "========================="
 
       - name: 验证 APK
         shell: bash
         run: |
-          if ! find source -type f -name "*.apk" | grep -q ".apk"; then
-            echo "错误：没有找到 APK"
+          APK_COUNT=$(find source -type f -name "*.apk" | wc -l)
+
+          echo "找到 APK：$APK_COUNT 个"
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "错误：APK 没有生成"
             exit 1
           fi
-          echo "APK 已成功生成"
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: QingJianIME-APK
+          path: source/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
