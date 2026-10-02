@@ -8,52 +8,95 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # 1. 下载项目
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. 解压 Android 工程
       - name: 解压工程
         run: |
           mkdir -p source
           unzip -q QingJianIME-Android-v1.0.0.zip -d source
 
-      # 3. 设置 JDK 17
       - name: 设置 JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
 
-      # 4. 设置 Android SDK
       - name: 设置 Android SDK
         run: |
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+          echo ANDROID_HOME=/usr/local/lib/android/sdk >> $GITHUB_ENV
+          echo ANDROID_SDK_ROOT=/usr/local/lib/android/sdk >> $GITHUB_ENV
+          echo /usr/local/lib/android/sdk/cmdline-tools/latest/bin >> $GITHUB_PATH
+          echo /usr/local/lib/android/sdk/platform-tools >> $GITHUB_PATH
 
-      # 5. 接受 Android SDK 许可证
       - name: 接受 Android SDK 许可证
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
+          yes | sdkmanager --licenses || true
 
-      # 6. 安装 Android SDK
-      - name: 安装 Android SDK 组件
+      - name: 安装 Android SDK
         run: |
-          sdkmanager "platform-tools"
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
+          sdkmanager platform-tools
+          sdkmanager platforms;android-35
+          sdkmanager build-tools;35.0.0
 
-      # 7. 设置 Gradle
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: 8.11.1
 
-      # 8. 配置 AndroidX 和 JVM 17
-      - name: 配置 AndroidX 和 JVM
+      - name: 配置 AndroidX
         working-directory: source
         run: |
-          echo "android
+          echo android.useAndroidX=true >> gradle.properties
+          echo android.enableJetifier=true >> gradle.properties
+
+      - name: 配置 Java 17
+        working-directory: source
+        run: |
+          printf '\nandroid.javaCompile.suppressSourceTargetDeprecationWarning=true\n' >> gradle.properties
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("app/build.gradle")
+          text = p.read_text()
+
+          if "compileOptions" not in text:
+              text += """
+          
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          """
+
+          if "jvmTarget = \"17\"" not in text:
+              text += """
+
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          """
+
+          p.write_text(text)
+          PY
+
+      - name: 编译 APK
+        working-directory: source
+        run: |
+          gradle :app:assembleDebug --no-daemon
+
+      - name: 检查 APK
+        run: |
+          ls -lh source/app/build/outputs/apk/debug/
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: QingJianIME-APK
+          path: source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
