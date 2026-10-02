@@ -26,7 +26,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 4. 设置 Android SDK 环境
+      # 4. 设置 Android SDK
       - name: 设置 Android SDK
         run: |
           echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
@@ -34,37 +34,39 @@ jobs:
           echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
 
-      # 5. 检查 SDK
-      - name: 检查 Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          sdkmanager --version
-
-      # 6. 自动接受所有 Android SDK 许可证
+      # 5. 接受许可证
       - name: 接受 Android SDK 许可证
         run: |
           yes | sdkmanager --licenses > /dev/null || true
 
-      # 7. 安装 Android 35
+      # 6. 安装 Android SDK
       - name: 安装 Android SDK 组件
         run: |
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      # 8. 设置 Gradle
+      # 7. 设置 Gradle
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      # 9. 检查项目
+      # 8. 开启 AndroidX
+      - name: 配置 AndroidX
+        working-directory: source
+        run: |
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+
+      # 9. 检查工程
       - name: 检查 Android 工程
         working-directory: source
         run: |
           echo "=== 工程目录 ==="
           ls -la
+          echo "=== gradle.properties ==="
+          cat gradle.properties
           echo "=== app 目录 ==="
           ls -la app
 
