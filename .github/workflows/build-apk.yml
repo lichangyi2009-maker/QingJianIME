@@ -8,14 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 获取项目
+
+      # 1. 下载项目
       - name: Checkout
         uses: actions/checkout@v4
 
       # 2. 解压 Android 工程
       - name: 解压工程
         run: |
-          mkdir source
+          mkdir -p source
           unzip -q QingJianIME-Android-v1.0.0.zip -d source
 
       # 3. 设置 JDK 17
@@ -25,40 +26,63 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # 4. 设置 Gradle
+      # 4. 设置 Android SDK 环境
+      - name: 设置 Android SDK
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "/usr/local/lib/android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "/usr/local/lib/android/sdk/platform-tools" >> $GITHUB_PATH
+
+      # 5. 检查 SDK
+      - name: 检查 Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          sdkmanager --version
+
+      # 6. 自动接受所有 Android SDK 许可证
+      - name: 接受 Android SDK 许可证
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+
+      # 7. 安装 Android 35
+      - name: 安装 Android SDK 组件
+        run: |
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      # 8. 设置 Gradle
       - name: 设置 Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      # 5. 设置 Android SDK
-      - name: 设置 Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          log-accepted-android-sdk-licenses: false
-          packages: ''
-
-      # 6. 自动接受 Android SDK 许可证
-      - name: 接受 Android SDK 许可证
+      # 9. 检查项目
+      - name: 检查 Android 工程
+        working-directory: source
         run: |
-          yes | sdkmanager --licenses || true
+          echo "=== 工程目录 ==="
+          ls -la
+          echo "=== app 目录 ==="
+          ls -la app
 
-      # 7. 安装需要的 Android SDK
-      - name: 安装 Android SDK
-        run: |
-          sdkmanager "platforms;android-35"
-          sdkmanager "build-tools;35.0.0"
-
-      # 8. 编译 APK
+      # 10. 编译 APK
       - name: 编译 APK
         working-directory: source
         run: |
-          gradle :app:assembleDebug
+          gradle :app:assembleDebug --no-daemon
 
-      # 9. 上传 APK
+      # 11. 检查 APK
+      - name: 检查 APK
+        run: |
+          ls -lh source/app/build/outputs/apk/debug/
+
+      # 12. 上传 APK
       - name: 上传 APK
         uses: actions/upload-artifact@v4
         with:
           name: QingJianIME-APK
           path: source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
